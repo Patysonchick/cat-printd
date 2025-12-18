@@ -1,20 +1,23 @@
+use ab_glyph::{FontRef, PxScale};
 use btleplug::{
     api::{Central, Manager as _, Peripheral as _, ScanFilter, WriteType},
     platform::{Manager, Peripheral},
 };
-use image::DynamicImage;
+use image::{DynamicImage, GrayImage, Luma};
+use imageproc::drawing::draw_text_mut;
 use std::time::Duration;
 use tokio::time;
 use uuid::Uuid;
 
+#[allow(unused)]
 const YHK_SERVICE_UUID: &str = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
 const YHK_WRITE_CHAR_UUID: &str = "49535343-8841-43f4-a8d4-ecbe34729bb3";
 const YHK_WIDTH: u16 = 384;
 const YHK_BYTES: u8 = (384 / 8) as u8; // 48 bytes
 
 pub struct Printer {
+    #[allow(unused)]
     model: Models,
-    width: u16,
     peripheral: Peripheral,
 }
 
@@ -50,11 +53,7 @@ impl Printer {
         println!("Connecting to {}...", peripheral.address());
         peripheral.connect().await?;
 
-        let printer = Printer {
-            model,
-            peripheral,
-            width: YHK_WIDTH,
-        };
+        let printer = Printer { model, peripheral };
         Ok(printer)
     }
 
@@ -165,7 +164,7 @@ impl Printer {
     pub async fn print_image(&self, img: DynamicImage) -> Result<(), Box<dyn std::error::Error>> {
         let img = img.resize(
             YHK_WIDTH as u32,
-            YHK_WIDTH as u32,
+            u32::MAX,
             image::imageops::FilterType::Nearest,
         );
         let img_gray = img.to_luma8();
@@ -173,11 +172,15 @@ impl Printer {
         println!("Printing...");
         self.start_print_sequence().await?;
 
-        for y in 0..YHK_WIDTH {
+        for y in 0..img_gray.height() {
             let mut line_data = [0u8; YHK_BYTES as usize];
 
             for x in 0..YHK_WIDTH {
-                let pixel = img_gray.get_pixel(x as u32, y as u32);
+                if x >= img_gray.width() as u16 {
+                    continue;
+                }
+
+                let pixel = img_gray.get_pixel(x as u32, y);
                 let brightness = pixel[0]; // 0..255
 
                 // Если картинка инвертирована, поменяй знак (< на >).
@@ -197,6 +200,40 @@ impl Printer {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 pub enum Models {
     YHK,
+}
+
+const MAX_TEXT_WIDTH: u32 = 384;
+const FONT_SIZE: f32 = 24.0;
+// const PADDING: u32 = 10;
+// const LINE_SPACING: u32 = 4;
+
+pub fn text_to_image(text: &str) -> DynamicImage {
+    let font_data =
+        include_bytes!("../font/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Regular.ttf");
+    let font = FontRef::try_from_slice(font_data).expect("Error constructing Font");
+    let scale = PxScale::from(FONT_SIZE);
+
+    let text_lines = text.lines();
+    let mut image = GrayImage::from_pixel(
+        MAX_TEXT_WIDTH,
+        (text_lines.clone().count() as f32 * FONT_SIZE) as u32,
+        Luma([255u8]),
+    );
+
+    for (i, line) in text_lines.enumerate() {
+        draw_text_mut(
+            &mut image,
+            Luma([0u8]),
+            0,
+            (FONT_SIZE * i as f32) as i32,
+            scale,
+            &font,
+            line,
+        );
+    }
+
+    DynamicImage::ImageLuma8(image)
 }
