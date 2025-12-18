@@ -198,6 +198,13 @@ impl Printer {
         println!("Done!");
         Ok(())
     }
+
+    pub async fn print_text(&self, text: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let img = text_to_image(text);
+
+        self.print_image(img).await?;
+        Ok(())
+    }
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -210,7 +217,7 @@ const FONT_SIZE: f32 = 24.0;
 // const PADDING: u32 = 10;
 // const LINE_SPACING: u32 = 4;
 
-pub fn text_to_image(text: &str) -> DynamicImage {
+fn text_to_image(text: &str) -> DynamicImage {
     let font_data =
         include_bytes!("../font/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Regular.ttf");
     let font = FontRef::try_from_slice(font_data).expect("Error constructing Font");
