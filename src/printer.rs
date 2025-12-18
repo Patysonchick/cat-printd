@@ -194,7 +194,7 @@ impl Printer {
             self.print_line(&line_data).await?;
         }
 
-        self.stop_print_sequence().await?;
+        // self.stop_print_sequence().await?;
         println!("Done!");
         Ok(())
     }
